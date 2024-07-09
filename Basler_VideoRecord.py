@@ -3,15 +3,25 @@ import datetime
 from pypylon import pylon
 import os
 
-# Basler kamera için gerekli başlatma işlemleri
-def initialize_camera():
-    # Pylon SDK ile kamera bağlanma işlemi
+# Belirli bir kamerayı başlatma işlemi
+def initialize_camera(camera_id):
     #os.environ["PYLON_CAMEMU"] = "1"  # Sanal kamera modu
     tl_factory = pylon.TlFactory.GetInstance()
     devices = tl_factory.EnumerateDevices()
     if not devices:
         raise pylon.RuntimeException("Kamera bulunamadı.")
-    camera = pylon.InstantCamera(tl_factory.CreateFirstDevice())
+    
+    # Kamera ID'sine göre cihazı seçme
+    selected_device = None
+    for device in devices:
+        if device.GetSerialNumber() == camera_id:
+            selected_device = device
+            break
+    
+    if not selected_device:
+        raise pylon.RuntimeException(f"{camera_id} ID'li kamera bulunamadı.")
+
+    camera = pylon.InstantCamera(tl_factory.CreateDevice(selected_device))
     camera.Open()
     return camera
 
@@ -22,16 +32,19 @@ def get_video_filename():
     return filename
 
 def main():
-    camera = initialize_camera()
+    camera_id = "0815-0000"  # Kaydını almak istediğiniz kameranın ID'sini buraya girin
+    camera = initialize_camera(camera_id)
 
     # Kamera parametrelerinden frame boyutlarını alıyoruz
     frame_width = camera.Width.Value
     frame_height = camera.Height.Value
+    frame_rate = camera.AcquisitionFrameRateAbs.Value  # FPS değerini alıyoruz
+    print("FPS:",frame_rate)
 
     # Video kaydedici ayarları
     filename = get_video_filename()
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v') # mp4 uzantısı için fourcc kodu
-    out = cv2.VideoWriter(filename, fourcc, 20.0, (frame_width, frame_height))
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # mp4 uzantısı için fourcc kodu
+    out = cv2.VideoWriter(filename, fourcc, frame_rate, (frame_width, frame_height))
 
     # Kamera sürekli görüntü alırken video kaydetme işlemi
     try:
