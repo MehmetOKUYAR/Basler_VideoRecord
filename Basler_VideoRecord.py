@@ -5,7 +5,7 @@ import os
 
 # Belirli bir kamerayı başlatma işlemi
 def initialize_camera(camera_id):
-    #os.environ["PYLON_CAMEMU"] = "1"  # Sanal kamera modu
+    os.environ["PYLON_CAMEMU"] = "1"  # Sanal kamera modu
     tl_factory = pylon.TlFactory.GetInstance()
     devices = tl_factory.EnumerateDevices()
     if not devices:
@@ -32,26 +32,30 @@ def get_video_filename():
     return filename
 
 def main():
-    camera_id = "0815-0000"  # Kaydını almak istediğiniz kameranın ID'sini buraya girin
+
+
+    camera_id = input("Kamera ID'sini girin: ")
     camera = initialize_camera(camera_id)
 
     # Kamera parametrelerinden frame boyutlarını alıyoruz
     frame_width = camera.Width.Value
     frame_height = camera.Height.Value
     frame_rate = camera.AcquisitionFrameRateAbs.Value  # FPS değerini alıyoruz
-    print("FPS:",frame_rate)
+    print("FPS:", frame_rate)
 
-    # Video kaydedici ayarları
-    filename = get_video_filename()
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # mp4 uzantısı için fourcc kodu
-    out = cv2.VideoWriter(filename, fourcc, frame_rate, (frame_width, frame_height))
+    out = None
+    recording = False
+    window_name = f"Basler Kamera - {camera_id}"
 
-    # Kamera sürekli görüntü alırken video kaydetme işlemi
+
     try:
         camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
         converter = pylon.ImageFormatConverter()
         converter.OutputPixelFormat = pylon.PixelType_RGB8packed
         converter.OutputBitAlignment = pylon.OutputBitAlignment_MsbAligned
+
+        # Pencereyi ayarlanabilir ve başlığı kameranın ID'siyle aç
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
         while camera.IsGrabbing():
             grabResult = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
@@ -62,14 +66,32 @@ def main():
                 img = image.GetArray()
                 frame = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-                cv2.imshow('Basler Kamera', frame)
+                key = cv2.waitKey(1) & 0xFF
 
-                # Görüntüyü video dosyasına yazma
-                out.write(frame)
-
-                # Çıkış için 'q' tuşuna basıldığında döngüyü sonlandırma
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                if key == ord('s') and not recording:
+                    filename = get_video_filename()
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(filename, fourcc, frame_rate, (frame_width, frame_height))
+                    recording = True
+                    print("Kayıt başladı.")
+                elif key == ord('d') and recording:
+                    recording = False
+                    if out:
+                        out.release()
+                        out = None
+                    print("Kayıt durdu.")
+                elif key == ord('q'):
                     break
+
+                # Kayıt sırasında ekrana yazı ekle
+                display_frame = frame.copy()
+                if recording:
+                    cv2.putText(display_frame, 'KAYIT BASLADI', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2, cv2.LINE_AA)
+                    if out:
+                        out.write(frame)
+
+                cv2.imshow(window_name, display_frame)
+
             grabResult.Release()
 
         camera.StopGrabbing()
@@ -79,7 +101,8 @@ def main():
 
     finally:
         camera.Close()
-        out.release()
+        if out:
+            out.release()
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
